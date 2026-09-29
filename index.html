@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gemini Brain Market AI - Live Demo</title>
+    <title>Gemini Brain Market AI - Auto Bot Terminal</title>
     
-    <!-- Tailwind CSS -->
+    <!-- Tailwind CSS for Styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- TradingView Lightweight Charts -->
     <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
@@ -15,361 +15,615 @@
             theme: {
                 extend: {
                     colors: {
-                        gray: { 950: '#030712', 900: '#111827', 800: '#1f2937' }
+                        darkBg: '#0b0e11',
+                        panelBg: '#181a20',
+                        brandBlue: '#2962ff',
+                        bullish: '#0ecb81',
+                        bearish: '#f6465d',
                     }
                 }
             }
         }
     </script>
     <style>
-        body { background-color: #030712; color: #f3f4f6; overflow: hidden; font-family: ui-sans-serif, system-ui, sans-serif; }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        #tv-chart { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+        body { background-color: #0b0e11; color: #EAECEF; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; overflow: hidden; }
+        .scrollable::-webkit-scrollbar { width: 6px; }
+        .scrollable::-webkit-scrollbar-track { background: #0b0e11; }
+        .scrollable::-webkit-scrollbar-thumb { background: #2b3139; border-radius: 4px; }
+        #tv-chart-container { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        
+        /* Auto Bot Animation */
+        .bot-active { box-shadow: 0 0 15px rgba(41, 98, 255, 0.6); animation: pulseBot 2s infinite; }
+        @keyframes pulseBot { 0% { box-shadow: 0 0 10px rgba(41, 98, 255, 0.4); } 50% { box-shadow: 0 0 20px rgba(41, 98, 255, 0.8); } 100% { box-shadow: 0 0 10px rgba(41, 98, 255, 0.4); } }
     </style>
 </head>
 <body class="flex flex-col h-screen text-sm">
 
-    <!-- GLOBAL WARNING -->
-    <div class="bg-yellow-600 text-black font-bold text-center py-1 text-xs tracking-widest uppercase">
-        ⚠️ DEMO / PAPER TRADING ONLY — P&L AND POSITIONS ARE SIMULATED. NO REAL TRADES EXECUTED.
+    <!-- SECURITY / DEMO BANNER -->
+    <div class="bg-yellow-500 text-black font-bold text-center py-1 text-[10px] sm:text-xs tracking-wider uppercase z-50 shadow-md">
+        ⚠️ PAPER TRADING ONLY — POSITIONS & P&L ARE SIMULATED. NO REAL MONEY INVOLVED.
     </div>
 
-    <!-- HEADER -->
-    <header class="border-b border-gray-800 bg-gray-900 p-3 flex justify-between items-center">
-        <div class="flex items-center gap-4 w-full">
-            <h1 class="text-xl font-bold bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent flex items-center gap-2 whitespace-nowrap">
-                ⚡ GEMINI BRAIN AI
-            </h1>
-            <div class="h-6 w-px bg-gray-700 mx-2"></div>
-            <!-- Ticker -->
-            <div id="ticker" class="flex gap-6 overflow-x-auto no-scrollbar w-full text-xs">
-                <span class="text-gray-500">Connecting to Live Market Data...</span>
+    <!-- HEADER / TICKER TAPE -->
+    <header class="bg-panelBg border-b border-gray-800 flex items-center px-4 h-14 shrink-0 justify-between">
+        <div class="flex items-center">
+            <div class="font-bold text-lg bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent mr-6 shrink-0 flex items-center gap-2">
+                🧠 GEMINI BRAIN
             </div>
+            <div class="h-6 w-px bg-gray-700 mr-6 hidden md:block"></div>
         </div>
-        <div class="flex items-center gap-4 text-xs whitespace-nowrap hidden md:flex ml-4">
-            <div class="text-green-400 flex items-center gap-1" id="api-status">🟢 Live API Connected</div>
-            <div class="text-blue-400 flex items-center gap-1">🧠 AI Ready</div>
+        
+        <!-- Live Ticker -->
+        <div id="top-ticker" class="flex-1 flex gap-6 overflow-x-auto scrollable no-scrollbar whitespace-nowrap items-center h-full">
+            <span class="text-gray-500 animate-pulse">Initializing Market Data...</span>
+        </div>
+
+        <!-- Connection & Bot Controls -->
+        <div class="flex items-center gap-3 shrink-0 ml-4">
+            <button id="auto-trade-btn" onclick="toggleAutoTrade()" class="px-4 py-1.5 rounded text-xs font-bold bg-gray-800 text-gray-400 border border-gray-700 transition">
+                🤖 AUTO-TRADE: OFF
+            </button>
+            <div id="connection-status" class="px-3 py-1 rounded text-xs font-bold bg-gray-800 text-gray-400 border border-gray-700">
+                CONNECTING...
+            </div>
         </div>
     </header>
 
-    <!-- MAIN WORKSPACE -->
-    <main class="flex-1 flex overflow-hidden">
+    <!-- MAIN DASHBOARD -->
+    <main class="flex-1 flex flex-col md:flex-row overflow-hidden">
         
-        <!-- LEFT PANEL -->
-        <aside class="w-64 border-r border-gray-800 bg-gray-900/50 p-4 flex flex-col gap-6 overflow-y-auto">
-            <div>
-                <h2 class="text-gray-400 font-semibold mb-3 text-xs uppercase tracking-wider">Timeframe</h2>
-                <div class="flex flex-wrap gap-2" id="timeframe-selector">
-                    <!-- Populated by JS -->
+        <!-- LEFT SIDEBAR: WATCHLIST & SCANNER -->
+        <aside class="w-full md:w-64 bg-panelBg border-r border-gray-800 flex flex-col shrink-0">
+            <div class="p-3 border-b border-gray-800">
+                <h3 class="text-xs text-gray-400 font-bold uppercase mb-2">Timeframe</h3>
+                <div class="flex gap-2" id="tf-buttons">
+                    <!-- JS will inject buttons -->
                 </div>
             </div>
-
-            <div>
-                <h2 class="text-gray-400 font-semibold mb-3 text-xs uppercase tracking-wider">Market Scanner</h2>
-                <div class="flex flex-col gap-2" id="scanner">
-                    <!-- Populated by JS -->
+            <div class="p-3 flex-1 overflow-y-auto scrollable">
+                <h3 class="text-xs text-gray-400 font-bold uppercase mb-2">AI Market Scanner</h3>
+                <div id="market-scanner" class="flex flex-col gap-1">
+                    <!-- JS will inject scanner rows -->
                 </div>
             </div>
         </aside>
 
-        <!-- CENTER PANEL -->
+        <!-- CENTER: CHART & AI PANEL -->
         <section class="flex-1 flex flex-col min-w-0">
-            <!-- Live TradingView Chart Area -->
-            <div class="h-1/2 border-b border-gray-800 relative bg-[#131722]">
-                <div class="absolute top-2 left-2 z-10 flex gap-2 pointer-events-none">
-                    <div id="chart-title" class="bg-gray-800/80 px-3 py-1 rounded text-lg font-bold backdrop-blur-sm">BTC/USDT</div>
+            
+            <!-- LIVE CHART AREA -->
+            <div class="h-1/2 relative bg-darkBg border-b border-gray-800">
+                <div class="absolute top-3 left-3 z-10 flex gap-2 items-center pointer-events-none">
+                    <div id="chart-symbol" class="text-xl font-bold text-white drop-shadow-md">BTC/USDT</div>
+                    <div id="chart-tf" class="text-brandBlue font-bold bg-blue-900/30 px-2 py-0.5 rounded border border-blue-800">15m</div>
                 </div>
-                <!-- Chart Container -->
-                <div id="tv-chart"></div>
+                <div id="tv-chart-container"></div>
             </div>
 
-            <!-- AI & Trading Panel -->
-            <div class="h-1/2 flex overflow-hidden">
-                <!-- AI Decision Panel -->
-                <div class="w-2/3 border-r border-gray-800 p-4 overflow-y-auto bg-gray-900/30" id="ai-panel">
-                    <div class="text-gray-500">Analyzing market data...</div>
-                </div>
+            <!-- AI ANALYSIS & PAPER TRADING -->
+            <div class="h-1/2 flex flex-col lg:flex-row overflow-hidden bg-panelBg">
                 
-                <!-- Paper Trading Panel -->
-                <div class="w-1/3 p-4 bg-gray-900/80 overflow-y-auto flex flex-col">
-                    <h2 class="text-lg font-bold mb-4 text-yellow-500">💼 PAPER TRADER</h2>
-                    <div class="bg-gray-800 p-3 rounded mb-4">
-                        <div class="text-xs text-gray-400">Demo Balance</div>
-                        <div class="text-xl font-mono" id="trade-balance">$10000.00</div>
+                <!-- AI Panel -->
+                <div class="w-full lg:w-3/5 border-r border-gray-800 p-4 overflow-y-auto scrollable" id="ai-panel">
+                    <span class="text-gray-500">Awaiting data for AI Analysis...</span>
+                </div>
+
+                <!-- Paper Trading Form -->
+                <div class="w-full lg:w-2/5 p-4 flex flex-col bg-[#1e2329] shadow-inner overflow-y-auto scrollable relative">
+                    
+                    <div id="auto-overlay" class="absolute inset-0 bg-black/60 z-10 hidden flex-col items-center justify-center backdrop-blur-sm">
+                        <div class="text-4xl mb-2 animate-bounce">🤖</div>
+                        <h3 class="text-brandBlue font-bold text-lg mb-1">AUTO-TRADING ACTIVE</h3>
+                        <p class="text-gray-300 text-xs text-center px-4">Gemini Brain is scanning and trading autonomously.</p>
                     </div>
-                    
-                    <label class="text-xs text-gray-400">Position Size (USD)</label>
-                    <input type="number" id="trade-size" value="1000" class="w-full bg-gray-950 border border-gray-700 rounded p-2 mb-4 text-sm outline-none text-white"/>
-                    
-                    <label class="text-xs text-gray-400">Leverage: <span id="lev-val" class="text-white">1</span>x</label>
-                    <input type="range" id="trade-leverage" min="1" max="100" value="1" class="w-full mb-6" oninput="document.getElementById('lev-val').innerText=this.value"/>
-                    
-                    <div class="grid grid-cols-2 gap-2 mt-auto border-t border-gray-800 pt-4">
-                        <button onclick="executeTrade('LONG')" class="bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded transition">TAKE LONG</button>
-                        <button onclick="executeTrade('SHORT')" class="bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded transition">TAKE SHORT</button>
+
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-sm font-bold text-gray-300">Manual / Bot Setup</h2>
+                        <span class="text-xs text-gray-500 font-mono">Available: <span id="ui-balance" class="text-white font-bold">$10,000.00</span></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="text-xs text-gray-400">Order Size (USD)</label>
+                        <div class="flex bg-darkBg border border-gray-700 rounded mt-1 p-2">
+                            <span class="text-gray-500 mr-2">$</span>
+                            <input type="number" id="trade-size" value="1000" class="bg-transparent w-full outline-none text-white font-mono">
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="text-xs text-gray-400 flex justify-between">
+                            <span>Leverage</span>
+                            <span class="text-brandBlue font-bold"><span id="lev-display">5</span>x</span>
+                        </label>
+                        <input type="range" id="trade-lev" min="1" max="100" value="5" class="w-full mt-2 accent-brandBlue" oninput="document.getElementById('lev-display').innerText = this.value">
+                    </div>
+
+                    <div class="flex gap-3 mt-auto">
+                        <button onclick="openPosition('LONG')" class="flex-1 bg-bullish hover:bg-green-500 text-white font-bold py-3 rounded shadow-lg transition transform hover:-translate-y-0.5">
+                            Buy / Long
+                        </button>
+                        <button onclick="openPosition('SHORT')" class="flex-1 bg-bearish hover:bg-red-500 text-white font-bold py-3 rounded shadow-lg transition transform hover:-translate-y-0.5">
+                            Sell / Short
+                        </button>
                     </div>
                 </div>
             </div>
         </section>
     </main>
 
-    <!-- BOTTOM PANEL -->
-    <footer class="h-64 border-t border-gray-800 bg-gray-900 flex flex-col">
-        <div class="flex border-b border-gray-800 bg-gray-900">
-            <button onclick="switchTab('POSITIONS')" class="tab-btn px-6 py-2 text-xs font-bold uppercase border-t-2 border-blue-500 bg-gray-800 text-white" id="tab-POSITIONS">POSITIONS (0)</button>
-            <button onclick="switchTab('HISTORY')" class="tab-btn px-6 py-2 text-xs font-bold uppercase text-gray-500 hover:text-gray-300" id="tab-HISTORY">HISTORY</button>
-            <button onclick="switchTab('DEMO PNL')" class="tab-btn px-6 py-2 text-xs font-bold uppercase text-gray-500 hover:text-gray-300" id="tab-DEMO PNL">DEMO P&L</button>
+    <!-- BOTTOM: POSITIONS & PNL -->
+    <footer class="h-64 border-t border-gray-800 bg-panelBg flex flex-col shrink-0">
+        <!-- Tabs -->
+        <div class="flex border-b border-gray-800">
+            <button onclick="switchTab('POSITIONS')" id="tab-btn-POSITIONS" class="px-6 py-3 text-xs font-bold text-brandBlue border-b-2 border-brandBlue bg-darkBg">OPEN POSITIONS (<span id="pos-count">0</span>)</button>
+            <button onclick="switchTab('HISTORY')" id="tab-btn-HISTORY" class="px-6 py-3 text-xs font-bold text-gray-400 hover:text-white">TRADE HISTORY</button>
             
-            <div class="ml-auto flex items-center px-4 gap-4 text-xs font-mono bg-gray-950">
-                <span class="text-gray-400">Equity: <span class="text-white" id="eq-val">$10000.00</span></span>
-                <span class="text-gray-400">Unrealized: <span id="unrealized-val" class="text-green-500">+$0.00</span></span>
+            <div class="ml-auto px-4 flex items-center gap-6 font-mono text-xs hidden sm:flex">
+                <div class="text-gray-400">Total Equity: <span id="ui-equity" class="text-white font-bold">$10,000.00</span></div>
+                <div class="text-gray-400">Unrealized P&L: <span id="ui-upnl" class="text-gray-500 font-bold">$0.00</span></div>
             </div>
         </div>
 
-        <div class="flex-1 overflow-auto bg-gray-950">
-            <!-- Positions Tab -->
-            <table class="w-full text-left text-xs tab-content" id="content-POSITIONS">
-                <thead class="bg-gray-900 sticky top-0 text-gray-400">
+        <!-- Tab Content -->
+        <div class="flex-1 overflow-y-auto scrollable bg-darkBg relative">
+            <table class="w-full text-left text-xs" id="tab-content-POSITIONS">
+                <thead class="text-gray-400 bg-panelBg sticky top-0 shadow-sm z-10">
                     <tr>
-                        <th class="p-2">Asset</th><th class="p-2">Dir</th><th class="p-2">Size/Lev</th>
-                        <th class="p-2">Demo Entry</th><th class="p-2">Mark Price</th><th class="p-2">Unrealized P&L</th><th class="p-2 text-right">Action</th>
+                        <th class="p-3 font-medium">Symbol</th>
+                        <th class="p-3 font-medium">Type</th>
+                        <th class="p-3 font-medium">Size (Lev)</th>
+                        <th class="p-3 font-medium">Entry Price</th>
+                        <th class="p-3 font-medium">Mark Price</th>
+                        <th class="p-3 font-medium text-right">Unrealized P&L</th>
+                        <th class="p-3 font-medium text-center">Action</th>
                     </tr>
                 </thead>
-                <tbody id="positions-body"><tr><td colspan="7" class="text-center p-8 text-gray-600">No open demo positions</td></tr></tbody>
+                <tbody id="positions-body" class="divide-y divide-gray-800">
+                    <tr><td colspan="7" class="text-center py-8 text-gray-600">No open positions</td></tr>
+                </tbody>
             </table>
 
-            <!-- History Tab -->
-            <table class="w-full text-left text-xs tab-content hidden" id="content-HISTORY">
-                <thead class="bg-gray-900 sticky top-0 text-gray-400">
+            <table class="w-full text-left text-xs hidden" id="tab-content-HISTORY">
+                <thead class="text-gray-400 bg-panelBg sticky top-0 shadow-sm z-10">
                     <tr>
-                        <th class="p-2">Time</th><th class="p-2">Asset</th><th class="p-2">Dir</th>
-                        <th class="p-2">Entry</th><th class="p-2">Exit</th><th class="p-2">P&L</th><th class="p-2">Result</th>
+                        <th class="p-3 font-medium">Time</th>
+                        <th class="p-3 font-medium">Symbol</th>
+                        <th class="p-3 font-medium">Type</th>
+                        <th class="p-3 font-medium">Entry</th>
+                        <th class="p-3 font-medium">Exit</th>
+                        <th class="p-3 font-medium text-right">Realized P&L</th>
+                        <th class="p-3 font-medium text-center">Closed By</th>
                     </tr>
                 </thead>
-                <tbody id="history-body"></tbody>
+                <tbody id="history-body" class="divide-y divide-gray-800">
+                    <tr><td colspan="7" class="text-center py-8 text-gray-600">No trade history yet</td></tr>
+                </tbody>
             </table>
-
-            <!-- PNL Tab -->
-            <div class="p-6 grid grid-cols-4 gap-6 tab-content hidden" id="content-DEMO PNL">
-                <div class="bg-gray-900 p-4 rounded border border-gray-800">
-                    <div class="text-gray-400 text-xs mb-1">Total Realized Demo P&L</div>
-                    <div id="pnl-realized" class="text-2xl font-mono text-green-500">+$0.00</div>
-                </div>
-                <div class="bg-gray-900 p-4 rounded border border-gray-800">
-                    <div class="text-gray-400 text-xs mb-1">Win Rate</div>
-                    <div id="pnl-winrate" class="text-2xl font-mono text-white">0%</div>
-                </div>
-                <div class="bg-gray-900 p-4 rounded border border-gray-800">
-                    <div class="text-gray-400 text-xs mb-1">Total Demo Trades</div>
-                    <div id="pnl-trades" class="text-2xl font-mono text-white">0</div>
-                </div>
-                <div class="bg-gray-900 p-4 rounded border border-gray-800 flex items-center justify-center text-center text-gray-500 uppercase text-xs font-bold">
-                    Simulated P&L <br/> Not Real Money
-                </div>
-            </div>
         </div>
     </footer>
 
     <script>
-        // --- APP STATE ---
-        const ASSETS = ['BTC', 'ETH', 'SOL', 'XRP', 'BNB', 'ADA'];
-        const TIMEFRAMES = [{l: '1m', v: '1m'}, {l: '5m', v: '5m'}, {l: '15m', v: '15m'}, {l: '1H', v: '1h'}, {l: '4H', v: '4h'}, {l: '1D', v: '1d'}];
+        /* ================= STATE & CONFIG ================= */
+        const ASSETS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'BNBUSDT', 'DOGEUSDT'];
+        const TIMEFRAMES = [
+            { label: '1m', value: '1m' },
+            { label: '5m', value: '5m' },
+            { label: '15m', value: '15m' },
+            { label: '1H', value: '1h' },
+            { label: '4H', value: '4h' },
+            { label: '1D', value: '1d' }
+        ];
         
-        let selectedAsset = 'BTC';
-        let selectedTf = '15m'; // Binance interval value
-        let selectedTfLabel = '15m';
-        
-        let balance = 10000;
-        let realizedPnl = 0;
-        let positions = [];
-        let historyLog = [];
-        let marketPrices = {}; // Store latest live prices
+        let state = {
+            symbol: 'BTCUSDT',
+            tf: '15m',
+            balance: 10000,
+            prices: {},      
+            changes: {},     
+            positions: [],
+            history: [],
+            isFallback: false,
+            autoTrade: false
+        };
 
-        let chart, lineSeries; // TradingView chart instances
+        let chart, candlestickSeries;
 
-        // --- INITIALIZATION ---
-        async function initApp() {
+        /* ================= INITIALIZATION ================= */
+        async function init() {
             renderTimeframes();
-            initChart();
-            await fetchAllTickers();
-            await loadChartData();
+            initTradingView();
             
-            // Poll for live prices every 3 seconds
-            setInterval(fetchAllTickers, 3000);
-            // Poll for new chart candle every 10 seconds
-            setInterval(loadChartData, 10000); 
+            await fetchMarketData();
+            await fetchChartData();
+
+            setInterval(fetchMarketData, 5000);   
+            setInterval(updatePositionsUI, 1000);
+            setInterval(fetchChartData, 15000);   
         }
 
-        function renderTimeframes() {
-            document.getElementById('timeframe-selector').innerHTML = TIMEFRAMES.map(tf => 
-                `<button onclick="setTf('${tf.v}', '${tf.l}')" class="px-2 py-1 rounded text-xs font-medium transition ${tf.v === selectedTf ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}">${tf.l}</button>`
-            ).join('');
-        }
-
-        // --- BINANCE LIVE DATA API ---
-        async function fetchAllTickers() {
-            try {
-                const symbols = JSON.stringify(ASSETS.map(a => a + 'USDT'));
-                const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${symbols}`;
-                const res = await fetch(url);
-                const data = await res.json();
-                
-                let tickerHtml = '';
-                let scannerHtml = '';
-
-                data.forEach(item => {
-                    const sym = item.symbol.replace('USDT', '');
-                    const price = parseFloat(item.lastPrice);
-                    const change = parseFloat(item.priceChangePercent);
-                    
-                    marketPrices[sym] = price; // Update state
-
-                    const color = change >= 0 ? 'text-green-500' : 'text-red-500';
-                    const sign = change > 0 ? '+' : '';
-                    
-                    // Top Bar Ticker
-                    tickerHtml += `
-                    <div class="flex flex-col cursor-pointer hover:bg-gray-800 px-2 rounded" onclick="setAsset('${sym}')">
-                        <span class="font-bold ${selectedAsset === sym ? 'text-blue-400' : 'text-gray-200'}">${sym}</span>
-                        <div class="flex gap-2 items-center text-xs">
-                            <span class="text-white">$${price >= 10 ? price.toFixed(2) : price.toFixed(4)}</span>
-                            <span class="${color}">${sign}${change.toFixed(2)}%</span>
-                        </div>
-                    </div>`;
-
-                    // Sidebar Scanner
-                    const aiDecision = change > 2 ? 'LONG' : (change < -2 ? 'SHORT' : 'WAIT');
-                    const aiColor = aiDecision === 'LONG' ? 'text-green-400' : (aiDecision === 'SHORT' ? 'text-red-400' : 'text-yellow-400');
-                    const conf = Math.floor(Math.min(Math.abs(change) * 15 + 50, 99));
-
-                    scannerHtml += `
-                    <div class="bg-gray-800 p-2 rounded flex justify-between items-center text-xs cursor-pointer hover:bg-gray-700 border border-transparent hover:border-gray-500 transition" onclick="setAsset('${sym}')">
-                        <span class="font-bold text-gray-200">${sym}</span>
-                        <span class="${aiColor} font-bold">${aiDecision} (${conf}%)</span>
-                    </div>`;
-                });
-
-                document.getElementById('ticker').innerHTML = tickerHtml;
-                document.getElementById('scanner').innerHTML = scannerHtml;
-                document.getElementById('api-status').innerHTML = '🟢 Live Data Active';
-                
-                updateUnrealizedPnl();
-                generateAIAnalysis();
-
-            } catch (err) {
-                console.error("API Error", err);
-                document.getElementById('api-status').innerHTML = '🔴 Connection Error';
+        /* ================= AUTO TRADE TOGGLE ================= */
+        window.toggleAutoTrade = function() {
+            state.autoTrade = !state.autoTrade;
+            const btn = document.getElementById('auto-trade-btn');
+            const overlay = document.getElementById('auto-overlay');
+            
+            if(state.autoTrade) {
+                btn.innerHTML = '🤖 AUTO-TRADE: ON';
+                btn.className = 'px-4 py-1.5 rounded text-xs font-bold bg-brandBlue text-white border border-blue-400 bot-active transition';
+                overlay.classList.remove('hidden');
+                overlay.classList.add('flex');
+            } else {
+                btn.innerHTML = '🤖 AUTO-TRADE: OFF';
+                btn.className = 'px-4 py-1.5 rounded text-xs font-bold bg-gray-800 text-gray-400 border border-gray-700 transition';
+                overlay.classList.add('hidden');
+                overlay.classList.remove('flex');
             }
         }
 
-        // --- TRADINGVIEW LIVE CHART ---
-        function initChart() {
-            const chartContainer = document.getElementById('tv-chart');
-            chart = LightweightCharts.createChart(chartContainer, {
-                layout: { background: { type: 'solid', color: '#131722' }, textColor: '#d1d5db' },
-                grid: { vertLines: { color: '#1f2937' }, horzLines: { color: '#1f2937' } },
-                crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-                timeScale: { timeVisible: true, secondsVisible: false },
-            });
-            lineSeries = chart.addCandlestickSeries({
-                upColor: '#22c55e', downColor: '#ef4444', borderVisible: false, wickUpColor: '#22c55e', wickDownColor: '#ef4444'
-            });
+        /* ================= API COMMUNICATION ================= */
+        async function fetchMarketData() {
+            try {
+                const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${JSON.stringify(ASSETS)}`;
+                const res = await fetch(url);
+                if (!res.ok) throw new Error('API Rate Limit');
+                const data = await res.json();
+                
+                data.forEach(item => {
+                    state.prices[item.symbol] = parseFloat(item.lastPrice);
+                    state.changes[item.symbol] = parseFloat(item.priceChangePercent);
+                });
+                
+                state.isFallback = false;
+                document.getElementById('connection-status').innerHTML = '🟢 LIVE API';
+                document.getElementById('connection-status').className = 'px-3 py-1 rounded text-[10px] font-bold bg-green-900 text-green-400 border border-green-700 shrink-0';
 
-            // Make chart responsive
-            new ResizeObserver(entries => {
-                if (entries.length === 0 || entries[0].target !== chartContainer) return;
-                const newRect = entries[0].contentRect;
-                chart.applyOptions({ height: newRect.height, width: newRect.width });
-            }).observe(chartContainer);
+            } catch (error) {
+                state.isFallback = true;
+                document.getElementById('connection-status').innerHTML = '🟡 SIMULATED DATA';
+                document.getElementById('connection-status').className = 'px-3 py-1 rounded text-[10px] font-bold bg-yellow-900 text-yellow-400 border border-yellow-700 shrink-0';
+                
+                ASSETS.forEach(sym => {
+                    if(!state.prices[sym]) state.prices[sym] = sym === 'BTCUSDT' ? 65000 : (sym === 'ETHUSDT' ? 3500 : 100);
+                    if(!state.changes[sym]) state.changes[sym] = 0;
+                    
+                    const volatility = state.prices[sym] * 0.0005; 
+                    state.prices[sym] += (Math.random() - 0.5) * volatility;
+                    state.changes[sym] += (Math.random() - 0.5) * 0.1;
+                });
+            }
+            
+            updateTickerUI();
+            updateScannerUI();
+            generateAIPanel();
         }
 
-        async function loadChartData() {
+        async function fetchChartData() {
             try {
-                const url = `https://api.binance.com/api/v3/klines?symbol=${selectedAsset}USDT&interval=${selectedTf}&limit=150`;
+                if (state.isFallback) return; 
+                
+                const url = `https://api.binance.com/api/v3/klines?symbol=${state.symbol}&interval=${state.tf}&limit=200`;
                 const res = await fetch(url);
                 const data = await res.json();
                 
-                const cData = data.map(d => ({
-                    time: d[0] / 1000,
+                const formattedData = data.map(d => ({
+                    time: Math.floor(d[0] / 1000), 
                     open: parseFloat(d[1]),
                     high: parseFloat(d[2]),
                     low: parseFloat(d[3]),
                     close: parseFloat(d[4])
                 }));
-                lineSeries.setData(cData);
-            } catch (e) { console.error("Chart Error", e); }
+                
+                formattedData.sort((a, b) => a.time - b.time);
+                candlestickSeries.setData(formattedData);
+            } catch (e) { }
         }
 
-        // --- UI INTERACTION ---
-        window.setAsset = async function(asset) {
-            selectedAsset = asset;
-            document.getElementById('chart-title').innerHTML = `${selectedAsset}/USDT <span class="text-blue-400 text-sm ml-2">${selectedTfLabel}</span>`;
-            await fetchAllTickers();
-            await loadChartData();
-        };
-
-        window.setTf = async function(val, label) {
-            selectedTf = val;
-            selectedTfLabel = label;
-            renderTimeframes();
-            document.getElementById('chart-title').innerHTML = `${selectedAsset}/USDT <span class="text-blue-400 text-sm ml-2">${selectedTfLabel}</span>`;
-            await loadChartData();
-        };
-
-        window.switchTab = function(tabName) {
-            document.querySelectorAll('.tab-btn').forEach(b => {
-                b.className = 'tab-btn px-6 py-2 text-xs font-bold uppercase ' + (b.id === `tab-${tabName}` ? 'border-t-2 border-blue-500 bg-gray-800 text-white' : 'text-gray-500 hover:text-gray-300');
+        /* ================= UI UPDATES ================= */
+        function updateTickerUI() {
+            let html = '';
+            ASSETS.forEach(sym => {
+                const price = state.prices[sym];
+                const change = state.changes[sym];
+                if(!price) return;
+                
+                const color = change >= 0 ? 'text-bullish' : 'text-bearish';
+                const sign = change > 0 ? '+' : '';
+                const name = sym.replace('USDT', '');
+                
+                html += `
+                <div class="cursor-pointer hover:bg-gray-800 px-3 py-1 rounded transition flex items-center gap-3 border border-transparent ${state.symbol === sym ? 'bg-gray-800 border-gray-700' : ''}" onclick="changeSymbol('${sym}')">
+                    <span class="font-bold text-gray-200">${name}</span>
+                    <span class="text-white font-mono">$${price >= 10 ? price.toFixed(2) : price.toFixed(4)}</span>
+                    <span class="${color} font-bold text-xs">${sign}${change.toFixed(2)}%</span>
+                </div>`;
             });
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
-            document.getElementById(`content-${tabName}`).classList.remove('hidden');
+            document.getElementById('top-ticker').innerHTML = html;
+        }
+
+        function updateScannerUI() {
+            let html = '';
+            ASSETS.forEach(sym => {
+                const change = state.changes[sym] || 0;
+                const name = sym.replace('USDT', '');
+                
+                const signal = change > 0.1 ? 'LONG' : (change < -0.1 ? 'SHORT' : 'WAIT');
+                const sigColor = signal === 'LONG' ? 'text-bullish' : (signal === 'SHORT' ? 'text-bearish' : 'text-yellow-500');
+                const conf = Math.floor(Math.min(Math.abs(change) * 20 + 55, 98));
+
+                html += `
+                <div class="flex justify-between items-center p-2 rounded cursor-pointer hover:bg-gray-800 transition ${state.symbol === sym ? 'bg-gray-800' : ''}" onclick="changeSymbol('${sym}')">
+                    <span class="font-bold text-gray-300">${name}</span>
+                    <span class="${sigColor} font-bold text-xs">${signal} ${conf}%</span>
+                </div>`;
+            });
+            document.getElementById('market-scanner').innerHTML = html;
+        }
+
+        function renderTimeframes() {
+            const html = TIMEFRAMES.map(t => 
+                `<button onclick="changeTimeframe('${t.value}')" class="flex-1 py-1 rounded text-[10px] font-bold uppercase transition ${state.tf === t.value ? 'bg-brandBlue text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}">${t.label}</button>`
+            ).join('');
+            document.getElementById('tf-buttons').innerHTML = html;
+        }
+
+        /* ================= AI LOGIC ENGINE & AUTO EXECUTION ================= */
+        function generateAIPanel() {
+            const price = state.prices[state.symbol];
+            const change = state.changes[state.symbol];
+            if(!price) return;
+
+            const isBullish = change >= 0;
+            const signal = Math.abs(change) > 0.1 ? (isBullish ? 'LONG SETUP' : 'SHORT SETUP') : 'WAIT / NO TRADE';
+            const sigColor = signal.includes('LONG') ? 'text-bullish' : (signal.includes('SHORT') ? 'text-bearish' : 'text-yellow-500');
+            const conf = Math.floor(Math.min(Math.abs(change) * 15 + 60, 96));
+
+            const sl = isBullish ? price * 0.98 : price * 1.02;
+            const tp = isBullish ? price * 1.04 : price * 0.96;
+
+            document.getElementById('ai-panel').innerHTML = `
+                <div class="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
+                    <div>
+                        <h2 class="text-xl font-bold text-white flex items-center gap-2">🧠 AI ANALYSIS</h2>
+                        <p class="text-xs text-gray-400 mt-1">${state.symbol.replace('USDT', '')}/USDT • ${state.tf}</p>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-3xl font-black ${sigColor}">${signal}</div>
+                        <div class="text-xs text-gray-300 mt-1">Confidence: <span class="font-bold">${conf}%</span></div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div class="bg-gray-900 p-3 rounded border border-gray-800">
+                        <h3 class="text-xs text-gray-400 font-bold uppercase mb-2">📊 Indicators</h3>
+                        <ul class="text-xs space-y-1">
+                            <li class="flex justify-between"><span>Trend:</span> <span class="${isBullish ? 'text-bullish' : 'text-bearish'}">${isBullish ? 'BULLISH ↗' : 'BEARISH ↘'}</span></li>
+                            <li class="flex justify-between"><span>24h Change:</span> <span class="${change >= 0 ? 'text-bullish' : 'text-bearish'}">${change > 0 ? '+' : ''}${change.toFixed(2)}%</span></li>
+                            <li class="flex justify-between"><span>Market:</span> <span class="text-yellow-500">VOLATILE</span></li>
+                        </ul>
+                    </div>
+                    <div class="bg-gray-900 p-3 rounded border border-gray-800">
+                        <h3 class="text-xs text-gray-400 font-bold uppercase mb-2">🎯 Demo Levels</h3>
+                        <ul class="text-xs space-y-1 font-mono">
+                            <li class="flex justify-between"><span>Entry:</span> <span class="text-white">$${price >= 10 ? price.toFixed(2) : price.toFixed(4)}</span></li>
+                            <li class="flex justify-between text-bearish"><span>Stop:</span> <span>$${sl >= 10 ? sl.toFixed(2) : sl.toFixed(4)}</span></li>
+                            <li class="flex justify-between text-bullish"><span>Target:</span> <span>$${tp >= 10 ? tp.toFixed(2) : tp.toFixed(4)}</span></li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="text-xs text-gray-400 border-t border-gray-800 pt-3">
+                    <span class="text-brandBlue font-bold">Reason: </span>
+                    ${signal.includes('LONG') ? 'Bullish momentum detected. Consider taking long positions with proper risk management.' : 
+                      signal.includes('SHORT') ? 'Bearish momentum detected. Consider short positions or avoiding entries.' : 
+                      'Market conditions neutral. Awaiting clearer signals.'}
+                </div>
+            `;
+
+            if (state.autoTrade && signal.includes('SETUP')) {
+                const direction = signal.includes('LONG') ? 'LONG' : 'SHORT';
+                const shouldOpen = Math.random() > 0.5;
+                if (shouldOpen && state.positions.filter(p => p.symbol === state.symbol).length === 0) {
+                    openPosition(direction, true);
+                }
+            }
+        }
+
+        /* ================= POSITION MANAGEMENT ================= */
+        window.openPosition = function(direction, isAuto = false) {
+            const size = parseFloat(document.getElementById('trade-size').value);
+            const lev = parseInt(document.getElementById('trade-lev').value);
+            const price = state.prices[state.symbol];
+
+            if (!size || size <= 0 || size > state.balance) {
+                alert('Invalid order size');
+                return;
+            }
+
+            const pos = {
+                id: Date.now(),
+                symbol: state.symbol,
+                direction,
+                size,
+                lev,
+                entryPrice: price,
+                openTime: new Date(),
+                pnl: 0,
+                pnlPercent: 0
+            };
+
+            state.positions.push(pos);
+            updatePositionsUI();
         };
 
-        // --- AI LOGIC ENGINE (MOCK BASED ON LIVE PRICE) ---
-        function generateAIAnalysis() {
-            const price = marketPrices[selectedAsset];
-            if(!price) return;
-            
-            // Pseudo-AI Logic using current time/price modulo to simulate dynamic analysis
-            const pseudoRand = (price * 100) % 100;
-            const isBullish = pseudoRand > 40;
-            const conf = Math.floor(pseudoRand / 2 + 45); // 45 to 95%
-            
-            let decision = isBullish ? 'LONG SETUP' : 'SHORT SETUP';
-            let color = isBullish ? 'text-green-400' : 'text-red-400';
-            if (conf < 60) { decision = 'WAIT'; color = 'text-yellow-400'; }
+        window.closePosition = function(id) {
+            const pos = state.positions.find(p => p.id === id);
+            if (!pos) return;
 
-            const sl = isBullish ? price * 0.985 : price * 1.015;
-            const tp1 = isBullish ? price * 1.03 : price * 0.97;
+            const closedPos = state.positions.splice(state.positions.indexOf(pos), 1)[0];
+            const currentPrice = state.prices[closedPos.symbol];
+            const priceDiff = closedPos.direction === 'LONG' 
+                ? (currentPrice - closedPos.entryPrice) 
+                : (closedPos.entryPrice - currentPrice);
+            
+            const realizedPnl = (priceDiff / closedPos.entryPrice) * closedPos.size * closedPos.lev;
+            
+            state.balance += realizedPnl;
+            state.history.push({
+                ...closedPos,
+                closePrice: currentPrice,
+                closedTime: new Date(),
+                realizedPnl
+            });
 
-            const html = `
-            <div class="flex justify-between items-start mb-4">
-                <div>
-                    <h2 class="text-lg font-bold text-blue-500 flex items-center gap-2">🧠 AI ANALYSIS</h2>
-                    <p class="text-sm text-gray-400">${selectedAsset}/USDT • Live</p>
-                </div>
-                <div class="text-right">
-                    <div class="text-2xl font-black ${color}">${decision}</div>
-                    <div class="text-sm font-semibold text-gray-300">CONFIDENCE: ${conf}%</div>
-                </div>
-            </div>
-            <div class="grid grid-cols-2 gap-4 mb-4">
-                <div class="bg-gray-800/80 p-3 rounded border border-gray-700">
-                    <h3 class="text-xs text-gray-400 mb-2 font-bold uppercase">Indicators</h3>
-                    <ul class="text-xs space-y-1">
-                        <li class="flex justify-between"><span>Trend:</span> <span class="${isBullish?'text-green-400':'text-red-400'}">${isBullish?'BULLISH':'BEARISH'}</span></li>
-                        <li class="flex justify-between"><span>Volume:</span> <span class="text-blue-400">NORMAL</span></li>
-                        <li class="flex justify-between"><span>Market:</span> <span class="text-yellow-400">VOLATILE</span></li>
-                    </ul>
-                </div>
-                <div class="bg-gray-800/80 p-3 rounded border border-gray-700">
-                    <h3 class="text-xs text-gray-400 mb-2 font-bold uppercase">Demo Targets</h3>
-                    <ul class="text-xs space-y-1 font-mono">
-                        <li class="flex justify-between"><span>Entry:</span> <span class="text-white">$${price >= 10 ? price.toFixed(2) : price.toFixed(4)}</span></li>
-                        <li class="flex justify-between text-red-400"><span>Stop:</span> <span>$${sl >= 10 ? sl.toFixed(2) : sl.toFixed(4)}</span></li>
-                        <li class="flex justify-between text-green-400"><span>Target:</span> <span>$${tp1 >= 10 ? tp1.toFixed(2) : tp1.toFixed(4)}</span></li>
-                    </ul>
-                </div>
-            </div>
-            <div class="text-xs text-gray-400 border-t border-gray-800 pt-2">
-                <span class="text-blue-400 font-bold">Reason
+            updatePositionsUI();
+            updateHistoryUI();
+        };
+
+        function updatePositionsUI() {
+            const currentPrice = state.prices[state.symbol];
+            let totalUnrealizedPnl = 0;
+            let html = '';
+
+            if (state.positions.length === 0) {
+                html = '<tr><td colspan="7" class="text-center py-8 text-gray-600">No open positions</td></tr>';
+            } else {
+                state.positions.forEach(pos => {
+                    const markPrice = state.prices[pos.symbol];
+                    const priceDiff = pos.direction === 'LONG' 
+                        ? (markPrice - pos.entryPrice) 
+                        : (pos.entryPrice - markPrice);
+                    
+                    const pnl = (priceDiff / pos.entryPrice) * pos.size * pos.lev;
+                    const pnlPercent = (priceDiff / pos.entryPrice) * 100 * pos.lev;
+                    totalUnrealizedPnl += pnl;
+
+                    const pnlColor = pnl >= 0 ? 'text-bullish' : 'text-bearish';
+                    const typeColor = pos.direction === 'LONG' ? 'text-bullish' : 'text-bearish';
+
+                    const sl = pos.direction === 'LONG' ? pos.entryPrice * 0.98 : pos.entryPrice * 1.02;
+                    const tp = pos.direction === 'LONG' ? pos.entryPrice * 1.04 : pos.entryPrice * 0.96;
+                    
+                    if ((pos.direction === 'LONG' && markPrice <= sl) || 
+                        (pos.direction === 'LONG' && markPrice >= tp) ||
+                        (pos.direction === 'SHORT' && markPrice >= sl) || 
+                        (pos.direction === 'SHORT' && markPrice <= tp)) {
+                        closePosition(pos.id);
+                        return;
+                    }
+
+                    html += `
+                    <tr class="border-gray-800 hover:bg-gray-800 transition">
+                        <td class="p-3 font-bold">${pos.symbol}</td>
+                        <td class="p-3"><span class="${typeColor} font-bold uppercase">${pos.direction}</span></td>
+                        <td class="p-3 font-mono text-xs">${pos.size.toFixed(2)} (${pos.lev}x)</td>
+                        <td class="p-3 font-mono text-xs">$${pos.entryPrice >= 10 ? pos.entryPrice.toFixed(2) : pos.entryPrice.toFixed(4)}</td>
+                        <td class="p-3 font-mono text-xs">$${markPrice >= 10 ? markPrice.toFixed(2) : markPrice.toFixed(4)}</td>
+                        <td class="p-3 text-right font-bold font-mono ${pnlColor}">
+                            ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} (${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toFixed(2)}%)
+                        </td>
+                        <td class="p-3 text-center">
+                            <button onclick="closePosition(${pos.id})" class="px-3 py-1 rounded text-[10px] font-bold bg-red-900 text-red-200 hover:bg-red-800 transition">CLOSE</button>
+                        </td>
+                    </tr>`;
+                });
+            }
+
+            document.getElementById('positions-body').innerHTML = html;
+            document.getElementById('pos-count').textContent = state.positions.length;
+
+            const color = totalUnrealizedPnl >= 0 ? 'text-bullish' : 'text-bearish';
+            document.getElementById('ui-upnl').innerHTML = `<span class="${color} font-bold">${totalUnrealizedPnl >= 0 ? '+' : ''}$${totalUnrealizedPnl.toFixed(2)}</span>`;
+            document.getElementById('ui-equity').innerHTML = `$${(state.balance + totalUnrealizedPnl).toFixed(2)}`;
+            document.getElementById('ui-balance').innerHTML = `$${state.balance.toFixed(2)}`;
+        }
+
+        function updateHistoryUI() {
+            let html = '';
+            if (state.history.length === 0) {
+                html = '<tr><td colspan="7" class="text-center py-8 text-gray-600">No trade history yet</td></tr>';
+            } else {
+                state.history.forEach(trade => {
+                    const pnlColor = trade.realizedPnl >= 0 ? 'text-bullish' : 'text-bearish';
+                    const result = trade.realizedPnl >= 0 ? '✅ WIN' : '❌ LOSS';
+                    
+                    html += `
+                    <tr class="border-gray-800">
+                        <td class="p-3 text-xs">${trade.closedTime.toLocaleTimeString()}</td>
+                        <td class="p-3 font-bold">${trade.symbol}</td>
+                        <td class="p-3 uppercase text-xs font-bold">${trade.direction}</td>
+                        <td class="p-3 font-mono text-xs">$${trade.entryPrice >= 10 ? trade.entryPrice.toFixed(2) : trade.entryPrice.toFixed(4)}</td>
+                        <td class="p-3 font-mono text-xs">$${trade.closePrice >= 10 ? trade.closePrice.toFixed(2) : trade.closePrice.toFixed(4)}</td>
+                        <td class="p-3 text-right font-bold font-mono ${pnlColor}">$${trade.realizedPnl >= 0 ? '+' : ''}${trade.realizedPnl.toFixed(2)}</td>
+                        <td class="p-3 text-center text-xs">${result}</td>
+                    </tr>`;
+                });
+            }
+            document.getElementById('history-body').innerHTML = html;
+        }
+
+        /* ================= SYMBOL / TIMEFRAME CHANGES ================= */
+        window.changeSymbol = async function(sym) {
+            state.symbol = sym;
+            document.getElementById('chart-symbol').textContent = sym.replace('USDT', '') + '/USDT';
+            renderTimeframes();
+            await fetchChartData();
+            generateAIPanel();
+        };
+
+        window.changeTimeframe = async function(tf) {
+            state.tf = tf;
+            document.getElementById('chart-tf').textContent = tf.toUpperCase();
+            renderTimeframes();
+            await fetchChartData();
+        };
+
+        /* ================= TAB SWITCHING ================= */
+        window.switchTab = function(tab) {
+            document.querySelectorAll('[id^="tab-btn-"]').forEach(b => {
+                b.className = 'px-6 py-3 text-xs font-bold';
+                if (b.id === `tab-btn-${tab}`) {
+                    b.className += ' text-brandBlue border-b-2 border-brandBlue bg-darkBg';
+                } else {
+                    b.className += ' text-gray-400 hover:text-white';
+                }
+            });
+
+            document.querySelectorAll('[id^="tab-content-"]').forEach(c => c.classList.add('hidden'));
+            document.getElementById(`tab-content-${tab}`).classList.remove('hidden');
+        };
+
+        /* ================= TRADINGVIEW CHART INIT ================= */
+        function initTradingView() {
+            const container = document.getElementById('tv-chart-container');
+            chart = LightweightCharts.createChart(container, {
+                layout: {
+                    background: { type: 'solid', color: '#0b0e11' },
+                    textColor: '#EAECEF'
+                },
+                grid: {
+                    vertLines: { color: '#2b3139' },
+                    horzLines: { color: '#2b3139' }
+                },
+                timeScale: { timeVisible: true, secondsVisible: false },
+                crosshair: { mode: LightweightCharts.CrosshairMode.Normal }
+            });
+
+            candlestickSeries = chart.addCandlestickSeries({
+                upColor: '#0ecb81',
+                downColor: '#f6465d',
+                borderVisible: false,
+                wickUpColor: '#0ecb81',
+                wickDownColor: '#f6465d'
+            });
+
+            new ResizeObserver(() => {
+                const rect = container.getBoundingClientRect();
+                chart.applyOptions({ height: rect.height, width: rect.width });
+            }).observe(container);
+        }
+
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
