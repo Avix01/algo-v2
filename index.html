@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Brain Market AI - Live Demo</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- TradingView Lightweight Charts -->
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        gray: { 950: '#030712', 900: '#111827', 800: '#1f2937' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #030712; color: #f3f4f6; overflow: hidden; font-family: ui-sans-serif, system-ui, sans-serif; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        #tv-chart { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+    </style>
+</head>
+<body class="flex flex-col h-screen text-sm">
+
+    <!-- GLOBAL WARNING -->
+    <div class="bg-yellow-600 text-black font-bold text-center py-1 text-xs tracking-widest uppercase">
+        ⚠️ DEMO / PAPER TRADING ONLY — P&L AND POSITIONS ARE SIMULATED. NO REAL TRADES EXECUTED.
+    </div>
+
+    <!-- HEADER -->
+    <header class="border-b border-gray-800 bg-gray-900 p-3 flex justify-between items-center">
+        <div class="flex items-center gap-4 w-full">
+            <h1 class="text-xl font-bold bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent flex items-center gap-2 whitespace-nowrap">
+                ⚡ GEMINI BRAIN AI
+            </h1>
+            <div class="h-6 w-px bg-gray-700 mx-2"></div>
+            <!-- Ticker -->
+            <div id="ticker" class="flex gap-6 overflow-x-auto no-scrollbar w-full text-xs">
+                <span class="text-gray-500">Connecting to Live Market Data...</span>
+            </div>
+        </div>
+        <div class="flex items-center gap-4 text-xs whitespace-nowrap hidden md:flex ml-4">
+            <div class="text-green-400 flex items-center gap-1" id="api-status">🟢 Live API Connected</div>
+            <div class="text-blue-400 flex items-center gap-1">🧠 AI Ready</div>
+        </div>
+    </header>
+
+    <!-- MAIN WORKSPACE -->
+    <main class="flex-1 flex overflow-hidden">
+        
+        <!-- LEFT PANEL -->
+        <aside class="w-64 border-r border-gray-800 bg-gray-900/50 p-4 flex flex-col gap-6 overflow-y-auto">
+            <div>
+                <h2 class="text-gray-400 font-semibold mb-3 text-xs uppercase tracking-wider">Timeframe</h2>
+                <div class="flex flex-wrap gap-2" id="timeframe-selector">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <div>
+                <h2 class="text-gray-400 font-semibold mb-3 text-xs uppercase tracking-wider">Market Scanner</h2>
+                <div class="flex flex-col gap-2" id="scanner">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- CENTER PANEL -->
+        <section class="flex-1 flex flex-col min-w-0">
+            <!-- Live TradingView Chart Area -->
+            <div class="h-1/2 border-b border-gray-800 relative bg-[#131722]">
+                <div class="absolute top-2 left-2 z-10 flex gap-2 pointer-events-none">
+                    <div id="chart-title" class="bg-gray-800/80 px-3 py-1 rounded text-lg font-bold backdrop-blur-sm">BTC/USDT</div>
+                </div>
+                <!-- Chart Container -->
+                <div id="tv-chart"></div>
+            </div>
+
+            <!-- AI & Trading Panel -->
+            <div class="h-1/2 flex overflow-hidden">
+                <!-- AI Decision Panel -->
+                <div class="w-2/3 border-r border-gray-800 p-4 overflow-y-auto bg-gray-900/30" id="ai-panel">
+                    <div class="text-gray-500">Analyzing market data...</div>
+                </div>
+                
+                <!-- Paper Trading Panel -->
+                <div class="w-1/3 p-4 bg-gray-900/80 overflow-y-auto flex flex-col">
+                    <h2 class="text-lg font-bold mb-4 text-yellow-500">💼 PAPER TRADER</h2>
+                    <div class="bg-gray-800 p-3 rounded mb-4">
+                        <div class="text-xs text-gray-400">Demo Balance</div>
+                        <div class="text-xl font-mono" id="trade-balance">$10000.00</div>
+                    </div>
+                    
+                    <label class="text-xs text-gray-400">Position Size (USD)</label>
+                    <input type="number" id="trade-size" value="1000" class="w-full bg-gray-950 border border-gray-700 rounded p-2 mb-4 text-sm outline-none text-white"/>
+                    
+                    <label class="text-xs text-gray-400">Leverage: <span id="lev-val" class="text-white">1</span>x</label>
+                    <input type="range" id="trade-leverage" min="1" max="100" value="1" class="w-full mb-6" oninput="document.getElementById('lev-val').innerText=this.value"/>
+                    
+                    <div class="grid grid-cols-2 gap-2 mt-auto border-t border-gray-800 pt-4">
+                        <button onclick="executeTrade('LONG')" class="bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded transition">TAKE LONG</button>
+                        <button onclick="executeTrade('SHORT')" class="bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded transition">TAKE SHORT</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- BOTTOM PANEL -->
+    <footer class="h-64 border-t border-gray-800 bg-gray-900 flex flex-col">
+        <div class="flex border-b border-gray-800 bg-gray-900">
+            <button onclick="switchTab('POSITIONS')" class="tab-btn px-6 py-2 text-xs font-bold uppercase border-t-2 border-blue-500 bg-gray-800 text-white" id="tab-POSITIONS">POSITIONS (0)</button>
+            <button onclick="switchTab('HISTORY')" class="tab-btn px-6 py-2 text-xs font-bold uppercase text-gray-500 hover:text-gray-300" id="tab-HISTORY">HISTORY</button>
+            <button onclick="switchTab('DEMO PNL')" class="tab-btn px-6 py-2 text-xs font-bold uppercase text-gray-500 hover:text-gray-300" id="tab-DEMO PNL">DEMO P&L</button>
+            
+            <div class="ml-auto flex items-center px-4 gap-4 text-xs font-mono bg-gray-950">
+                <span class="text-gray-400">Equity: <span class="text-white" id="eq-val">$10000.00</span></span>
+                <span class="text-gray-400">Unrealized: <span id="unrealized-val" class="text-green-500">+$0.00</span></span>
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-auto bg-gray-950">
+            <!-- Positions Tab -->
+            <table class="w-full text-left text-xs tab-content" id="content-POSITIONS">
+                <thead class="bg-gray-900 sticky top-0 text-gray-400">
+                    <tr>
+                        <th class="p-2">Asset</th><th class="p-2">Dir</th><th class="p-2">Size/Lev</th>
+                        <th class="p-2">Demo Entry</th><th class="p-2">Mark Price</th><th class="p-2">Unrealized P&L</th><th class="p-2 text-right">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="positions-body"><tr><td colspan="7" class="text-center p-8 text-gray-600">No open demo positions</td></tr></tbody>
+            </table>
+
+            <!-- History Tab -->
+            <table class="w-full text-left text-xs tab-content hidden" id="content-HISTORY">
+                <thead class="bg-gray-900 sticky top-0 text-gray-400">
+                    <tr>
+                        <th class="p-2">Time</th><th class="p-2">Asset</th><th class="p-2">Dir</th>
+                        <th class="p-2">Entry</th><th class="p-2">Exit</th><th class="p-2">P&L</th><th class="p-2">Result</th>
+                    </tr>
+                </thead>
+                <tbody id="history-body"></tbody>
+            </table>
+
+            <!-- PNL Tab -->
+            <div class="p-6 grid grid-cols-4 gap-6 tab-content hidden" id="content-DEMO PNL">
+                <div class="bg-gray-900 p-4 rounded border border-gray-800">
+                    <div class="text-gray-400 text-xs mb-1">Total Realized Demo P&L</div>
+                    <div id="pnl-realized" class="text-2xl font-mono text-green-500">+$0.00</div>
+                </div>
+                <div class="bg-gray-900 p-4 rounded border border-gray-800">
+                    <div class="text-gray-400 text-xs mb-1">Win Rate</div>
+                    <div id="pnl-winrate" class="text-2xl font-mono text-white">0%</div>
+                </div>
+                <div class="bg-gray-900 p-4 rounded border border-gray-800">
+                    <div class="text-gray-400 text-xs mb-1">Total Demo Trades</div>
+                    <div id="pnl-trades" class="text-2xl font-mono text-white">0</div>
+                </div>
+                <div class="bg-gray-900 p-4 rounded border border-gray-800 flex items-center justify-center text-center text-gray-500 uppercase text-xs font-bold">
+                    Simulated P&L <br/> Not Real Money
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // --- APP STATE ---
+        const ASSETS = ['BTC', 'ETH', 'SOL', 'XRP', 'BNB', 'ADA'];
+        const TIMEFRAMES = [{l: '1m', v: '1m'}, {l: '5m', v: '5m'}, {l: '15m', v: '15m'}, {l: '1H', v: '1h'}, {l: '4H', v: '4h'}, {l: '1D', v: '1d'}];
+        
+        let selectedAsset = 'BTC';
+        let selectedTf = '15m'; // Binance interval value
+        let selectedTfLabel = '15m';
+        
+        let balance = 10000;
+        let realizedPnl = 0;
+        let positions = [];
+        let historyLog = [];
+        let marketPrices = {}; // Store latest live prices
+
+        let chart, lineSeries; // TradingView chart instances
+
+        // --- INITIALIZATION ---
+        async function initApp() {
+            renderTimeframes();
+            initChart();
+            await fetchAllTickers();
+            await loadChartData();
+            
+            // Poll for live prices every 3 seconds
+            setInterval(fetchAllTickers, 3000);
+            // Poll for new chart candle every 10 seconds
+            setInterval(loadChartData, 10000); 
+        }
+
+        function renderTimeframes() {
+            document.getElementById('timeframe-selector').innerHTML = TIMEFRAMES.map(tf => 
+                `<button onclick="setTf('${tf.v}', '${tf.l}')" class="px-2 py-1 rounded text-xs font-medium transition ${tf.v === selectedTf ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}">${tf.l}</button>`
+            ).join('');
+        }
+
+        // --- BINANCE LIVE DATA API ---
+        async function fetchAllTickers() {
+            try {
+                const symbols = JSON.stringify(ASSETS.map(a => a + 'USDT'));
+                const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${symbols}`;
+                const res = await fetch(url);
+                const data = await res.json();
+                
+                let tickerHtml = '';
+                let scannerHtml = '';
+
+                data.forEach(item => {
+                    const sym = item.symbol.replace('USDT', '');
+                    const price = parseFloat(item.lastPrice);
+                    const change = parseFloat(item.priceChangePercent);
+                    
+                    marketPrices[sym] = price; // Update state
+
+                    const color = change >= 0 ? 'text-green-500' : 'text-red-500';
+                    const sign = change > 0 ? '+' : '';
+                    
+                    // Top Bar Ticker
+                    tickerHtml += `
+                    <div class="flex flex-col cursor-pointer hover:bg-gray-800 px-2 rounded" onclick="setAsset('${sym}')">
+                        <span class="font-bold ${selectedAsset === sym ? 'text-blue-400' : 'text-gray-200'}">${sym}</span>
+                        <div class="flex gap-2 items-center text-xs">
+                            <span class="text-white">$${price >= 10 ? price.toFixed(2) : price.toFixed(4)}</span>
+                            <span class="${color}">${sign}${change.toFixed(2)}%</span>
+                        </div>
+                    </div>`;
+
+                    // Sidebar Scanner
+                    const aiDecision = change > 2 ? 'LONG' : (change < -2 ? 'SHORT' : 'WAIT');
+                    const aiColor = aiDecision === 'LONG' ? 'text-green-400' : (aiDecision === 'SHORT' ? 'text-red-400' : 'text-yellow-400');
+                    const conf = Math.floor(Math.min(Math.abs(change) * 15 + 50, 99));
+
+                    scannerHtml += `
+                    <div class="bg-gray-800 p-2 rounded flex justify-between items-center text-xs cursor-pointer hover:bg-gray-700 border border-transparent hover:border-gray-500 transition" onclick="setAsset('${sym}')">
+                        <span class="font-bold text-gray-200">${sym}</span>
+                        <span class="${aiColor} font-bold">${aiDecision} (${conf}%)</span>
+                    </div>`;
+                });
+
+                document.getElementById('ticker').innerHTML = tickerHtml;
+                document.getElementById('scanner').innerHTML = scannerHtml;
+                document.getElementById('api-status').innerHTML = '🟢 Live Data Active';
+                
+                updateUnrealizedPnl();
+                generateAIAnalysis();
+
+            } catch (err) {
+                console.error("API Error", err);
+                document.getElementById('api-status').innerHTML = '🔴 Connection Error';
+            }
+        }
+
+        // --- TRADINGVIEW LIVE CHART ---
+        function initChart() {
+            const chartContainer = document.getElementById('tv-chart');
+            chart = LightweightCharts.createChart(chartContainer, {
+                layout: { background: { type: 'solid', color: '#131722' }, textColor: '#d1d5db' },
+                grid: { vertLines: { color: '#1f2937' }, horzLines: { color: '#1f2937' } },
+                crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+                timeScale: { timeVisible: true, secondsVisible: false },
+            });
+            lineSeries = chart.addCandlestickSeries({
+                upColor: '#22c55e', downColor: '#ef4444', borderVisible: false, wickUpColor: '#22c55e', wickDownColor: '#ef4444'
+            });
+
+            // Make chart responsive
+            new ResizeObserver(entries => {
+                if (entries.length === 0 || entries[0].target !== chartContainer) return;
+                const newRect = entries[0].contentRect;
+                chart.applyOptions({ height: newRect.height, width: newRect.width });
+            }).observe(chartContainer);
+        }
+
+        async function loadChartData() {
+            try {
+                const url = `https://api.binance.com/api/v3/klines?symbol=${selectedAsset}USDT&interval=${selectedTf}&limit=150`;
+                const res = await fetch(url);
+                const data = await res.json();
+                
+                const cData = data.map(d => ({
+                    time: d[0] / 1000,
+                    open: parseFloat(d[1]),
+                    high: parseFloat(d[2]),
+                    low: parseFloat(d[3]),
+                    close: parseFloat(d[4])
+                }));
+                lineSeries.setData(cData);
+            } catch (e) { console.error("Chart Error", e); }
+        }
+
+        // --- UI INTERACTION ---
+        window.setAsset = async function(asset) {
+            selectedAsset = asset;
+            document.getElementById('chart-title').innerHTML = `${selectedAsset}/USDT <span class="text-blue-400 text-sm ml-2">${selectedTfLabel}</span>`;
+            await fetchAllTickers();
+            await loadChartData();
+        };
+
+        window.setTf = async function(val, label) {
+            selectedTf = val;
+            selectedTfLabel = label;
+            renderTimeframes();
+            document.getElementById('chart-title').innerHTML = `${selectedAsset}/USDT <span class="text-blue-400 text-sm ml-2">${selectedTfLabel}</span>`;
+            await loadChartData();
+        };
+
+        window.switchTab = function(tabName) {
+            document.querySelectorAll('.tab-btn').forEach(b => {
+                b.className = 'tab-btn px-6 py-2 text-xs font-bold uppercase ' + (b.id === `tab-${tabName}` ? 'border-t-2 border-blue-500 bg-gray-800 text-white' : 'text-gray-500 hover:text-gray-300');
+            });
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+            document.getElementById(`content-${tabName}`).classList.remove('hidden');
+        };
+
+        // --- AI LOGIC ENGINE (MOCK BASED ON LIVE PRICE) ---
+        function generateAIAnalysis() {
+            const price = marketPrices[selectedAsset];
+            if(!price) return;
+            
+            // Pseudo-AI Logic using current time/price modulo to simulate dynamic analysis
+            const pseudoRand = (price * 100) % 100;
+            const isBullish = pseudoRand > 40;
+            const conf = Math.floor(pseudoRand / 2 + 45); // 45 to 95%
+            
+            let decision = isBullish ? 'LONG SETUP' : 'SHORT SETUP';
+            let color = isBullish ? 'text-green-400' : 'text-red-400';
+            if (conf < 60) { decision = 'WAIT'; color = 'text-yellow-400'; }
+
+            const sl = isBullish ? price * 0.985 : price * 1.015;
+            const tp1 = isBullish ? price * 1.03 : price * 0.97;
+
+            const html = `
+            <div class="flex justify-between items-start mb-4">
+                <div>
+                    <h2 class="text-lg font-bold text-blue-500 flex items-center gap-2">🧠 AI ANALYSIS</h2>
+                    <p class="text-sm text-gray-400">${selectedAsset}/USDT • Live</p>
+                </div>
+                <div class="text-right">
+                    <div class="text-2xl font-black ${color}">${decision}</div>
+                    <div class="text-sm font-semibold text-gray-300">CONFIDENCE: ${conf}%</div>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div class="bg-gray-800/80 p-3 rounded border border-gray-700">
+                    <h3 class="text-xs text-gray-400 mb-2 font-bold uppercase">Indicators</h3>
+                    <ul class="text-xs space-y-1">
+                        <li class="flex justify-between"><span>Trend:</span> <span class="${isBullish?'text-green-400':'text-red-400'}">${isBullish?'BULLISH':'BEARISH'}</span></li>
+                        <li class="flex justify-between"><span>Volume:</span> <span class="text-blue-400">NORMAL</span></li>
+                        <li class="flex justify-between"><span>Market:</span> <span class="text-yellow-400">VOLATILE</span></li>
+                    </ul>
+                </div>
+                <div class="bg-gray-800/80 p-3 rounded border border-gray-700">
+                    <h3 class="text-xs text-gray-400 mb-2 font-bold uppercase">Demo Targets</h3>
+                    <ul class="text-xs space-y-1 font-mono">
+                        <li class="flex justify-between"><span>Entry:</span> <span class="text-white">$${price >= 10 ? price.toFixed(2) : price.toFixed(4)}</span></li>
+                        <li class="flex justify-between text-red-400"><span>Stop:</span> <span>$${sl >= 10 ? sl.toFixed(2) : sl.toFixed(4)}</span></li>
+                        <li class="flex justify-between text-green-400"><span>Target:</span> <span>$${tp1 >= 10 ? tp1.toFixed(2) : tp1.toFixed(4)}</span></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="text-xs text-gray-400 border-t border-gray-800 pt-2">
+                <span class="text-blue-400 font-bold">Reason
