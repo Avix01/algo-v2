@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Binance 4H Swing Terminal</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0e17;--pn:#131722;--ln:#222a3a;--tx:#c5cdd9;--mu:#6b778c;--g:#26a69a;--r:#ef5350;--am:#f0b429;--bl:#7f9ccc;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:13px/1.45 "JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;padding:0 12px 20px}
+.nav{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;padding:10px 0;border-bottom:1px solid var(--ln);position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);z-index:5}
+.brand{font-weight:600;letter-spacing:.5px}.brand small{display:block;color:var(--mu);font-weight:400;font-size:11px}
+.st{display:flex;flex-direction:column;font-size:12px}.st i{font-style:normal;color:var(--mu);font-size:10px;letter-spacing:1px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor;margin-right:6px}
+.g{color:var(--g)}.r{color:var(--r)}.a{color:var(--am)}.m{color:var(--mu)}.sp{flex:1}
+button{font:inherit;color:var(--tx);background:var(--pn);border:1px solid var(--ln);border-radius:4px;padding:6px 12px;cursor:pointer}
+button:focus-visible{outline:2px solid var(--bl)}
+.go{font-weight:600;letter-spacing:1px;padding:9px 20px;color:#fff;background:var(--g);border-color:var(--g);box-shadow:0 0 14px rgba(38,166,154,.35)}
+.go.on{background:var(--r);border-color:var(--r);box-shadow:0 0 14px rgba(239,83,80,.35)}
+button.sm{font-size:11px;padding:4px 9px}button.act{border-color:var(--bl);color:#fff}
+.warn{margin:10px 0 0;padding:8px 10px;border:1px solid var(--am);border-radius:4px;color:var(--am);font-size:12px}
+.kp{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:12px 0}
+.k{background:var(--pn);border:1px solid var(--ln);border-radius:4px;padding:10px 12px}
+.k i{font-style:normal;color:var(--mu);font-size:10px;letter-spacing:1px}.k b{display:block;font-size:20px;font-weight:600;margin-top:2px}.k s{text-decoration:none;color:var(--mu);font-size:11px}
+.ph{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:18px 0 6px;color:var(--mu);font-size:11px;letter-spacing:1px}
+.w{overflow-x:auto;background:var(--pn);border:1px solid var(--ln);border-radius:4px}
+table{border-collapse:collapse;width:100%;white-space:nowrap}
+th,td{padding:6px 12px;text-align:right;border-bottom:1px solid var(--ln)}
+th{color:var(--mu);font-weight:400;font-size:11px;background:#0f1420}
+th:first-child,td:first-child,.l{text-align:left}tr:last-child td{border-bottom:0}tbody tr:hover{background:#171d2b}
+.b{display:inline-block;min-width:68px;text-align:center;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:600}
+.BUY{background:rgba(38,166,154,.18);color:var(--g);border:1px solid var(--g)}
+.SELL{background:rgba(239,83,80,.18);color:var(--r);border:1px solid var(--r)}
+.HOLD{background:rgba(127,156,204,.12);color:var(--bl);border:1px solid #3b4a68}
+.WAITING,.ERROR,.OPEN,.CLOSED{background:#1b2130;color:var(--mu);border:1px solid var(--ln)}
+.pg{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:8px;color:var(--mu)}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/htm@3.1.1/dist/htm.umd.js"></script>
+<script>
+const {useState,useEffect,useReducer}=React,html=htm.bind(React.createElement);
+const PAIRS=["BTCUSDT","ETHUSDT","SOLUSDT","PAXGUSDT","BNBUSDT","XRPUSDT","DOGEUSDT","ADAUSDT","AVAXUSDT","LINKUSDT"];
+const LABEL={PAXGUSDT:"PAXG/USDT (Gold)"};const name=s=>LABEL[s]||s.replace("USDT","/USDT");
+const FX=87,START=1e4,RISK=.01,AM=2,VS=1.5,MINC=210,H4=144e5,PER=8,KEY="binance-swing-v1",HOSTS=["https://api.binance.com","https://data-api.binance.vision"];
+let S={cash:START,pos:{},jr:[],seen:{}};
+try{const x=JSON.parse(localStorage.getItem(KEY));if(x&&x.pos)S=x}catch(e){}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
+const FEED={},PX={};let nextAt=0,lastScan=null,okN=0,scanned=false;
+
+/* indicators */
+const ema=(x,n)=>{const k=2/(n+1);let e=0;return x.map((v,i)=>(e=i?v*k+e*(1-k):v))};
+const rsi=(c,n=14)=>{let u=0,w=0;return c.map((v,i)=>{if(!i)return NaN;const d=v-c[i-1],a=Math.max(d,0),b=Math.max(-d,0);u=i==1?a:u+(a-u)/n;w=i==1?b:w+(b-w)/n;return i<n?NaN:100-100/(1+u/w)})};
+const atr=(c,n=14)=>{let a=0;return c.map((x,i)=>{const p=i?c[i-1].c:x.c,tr=Math.max(x.h-x.l,Math.abs(x.h-p),Math.abs(x.l-p));a=i?a+(tr-a)/n:tr;return i<n?NaN:a})};
+function analyze(c,price){
+  if(c.length<MINC)throw new Error("only "+c.length+" closed candles");
+  const cl=c.map(x=>x.c),e10=ema(cl,10),e50=ema(cl,50),e200=ema(cl,200),r=rsi(cl),A=atr(c),i=c.length-1;
+  const vm=c.slice(-20).reduce((s,x)=>s+x.v,0)/20,surge=vm>0?c[i].v/vm:0;
+  return{price,close:cl[i],e10:e10[i],rsi:r[i],atr:A[i],surge,ts:c[i].t,
+    trend:cl[i]>e200[i]?(cl[i]>e50[i]?"UPTREND":"UPTREND · PULLBACK"):"DOWNTREND",sig:cl[i]>e200[i]&&r[i]>60&&surge>VS}}
+
+/* Binance public REST (async, no keys) */
+async function getJSON(u){const c=new AbortController(),t=setTimeout(()=>c.abort(),8000);try{const r=await fetch(u,{signal:c.signal});if(!r.ok)throw new Error("HTTP "+r.status);return await r.json()}finally{clearTimeout(t)}}
+async function klines(sym){let err;for(const h of HOSTS){try{
+  const k=await getJSON(`${h}/api/v3/klines?symbol=${sym}&interval=4h&limit=500`),now=Date.now(),all=k.map(x=>({t:x[0],o:+x[1],h:+x[2],l:+x[3],c:+x[4],v:+x[5]}));
+  return analyze(all.filter(x=>x.t+H4<=now),all[all.length-1].c)}catch(e){err=e}}throw err}
+
+/* strategy + INR portfolio (fixed 1 USD = Rs 87) */
+const equity=()=>{let e=S.cash;for(const s in S.pos)e+=S.pos[s].u*(PX[s]??S.pos[s].entry)*FX;return e};
+function open(s,d){
+  let u=equity()*RISK/(AM*d.atr*FX);u=Math.min(u,S.cash/(d.price*FX));const cost=u*d.price*FX;
+  if(!(d.atr>0)||cost<50)return false;
+  S.cash-=cost;S.pos[s]={u,entry:d.price,atr:d.atr,stop:d.price-AM*d.atr,cost,time:Date.now(),candle:d.ts};S.seen[s]=d.ts;return true}
+function close(s,p,price,why){
+  const pro=p.u*price*FX,pnl=pro-p.cost;S.cash+=pro;
+  S.jr.push({s,t0:p.time,t1:Date.now(),size:p.cost,entry:p.entry*FX,stop:p.stop*FX,pnl,pct:pnl/p.cost*100,why});delete S.pos[s]}
+function proc(s,d,err){
+  if(err){FEED[s]={dec:"ERROR",note:err};return}
+  PX[s]=d.price;const p=S.pos[s];let dec="WAITING",note="";
+  if(p){dec="HOLD";let why=null;
+    if(d.price<=p.stop)why="Hard stop-loss (2x ATR)";else if(d.ts>p.candle&&d.close<d.e10)why="4H close below 10 EMA";
+    if(why){close(s,p,d.price,why);dec="SELL";note=why}else note="Stop ₹"+(p.stop*FX).toFixed(2)}
+  else if(d.sig){if(S.seen[s]===d.ts)note="Signal already traded this candle";else if(open(s,d)){dec="BUY";note="Long opened"}else note="Signal: insufficient cash"}
+  FEED[s]={px:d.price*FX,rsi:d.rsi,surge:d.surge,trend:d.trend,dec,note}}
+async function scan(alive){
+  const res=await Promise.all(PAIRS.map(async s=>{try{return{s,d:await klines(s)}}catch(e){return{s,err:e.name==="AbortError"?"timeout":(e.message==="Failed to fetch"?"request blocked / unreachable":e.message)}}}));
+  if(!alive())return;
+  okN=res.filter(r=>!r.err).length;res.forEach(r=>proc(r.s,r.d,r.err));scanned=true;lastScan=new Date();save()}
+
+/* UI */
+const inr=v=>(v<0?"-":"")+"₹"+Math.abs(v).toLocaleString("en-IN",{minimumFractionDigits:2,maximumFractionDigits:2});
+const cls=v=>v>0?"g":v<0?"r":"",p2=n=>String(n).padStart(2,"0");
+const ts=t=>{const d=new Date(t);return d.getFullYear()+"-"+p2(d.getMonth()+1)+"-"+p2(d.getDate())+" "+p2(d.getHours())+":"+p2(d.getMinutes())+":"+p2(d.getSeconds())};
+const Dot=({c,t})=>html`<span className=${c}><span className="dot"></span>${t}</span>`;
+function App(){
+  const[running,setRun]=useState(true),[flt,setFlt]=useState("all"),[page,setPage]=useState(0),[,force]=useReducer(x=>x+1,0);
+  useEffect(()=>{if(!running){scanned=false;return}
+    let on=true,t;const loop=async()=>{nextAt=Date.now()+6e4;await scan(()=>on);if(!on)return;nextAt=Date.now()+6e4;force();t=setTimeout(loop,6e4)};loop();
+    return()=>{on=false;clearTimeout(t)}},[running]);
+  useEffect(()=>{const i=setInterval(force,500);return()=>clearInterval(i)},[]);
+  const eq=equity();let op=0;const items=[];
+  for(const s in S.pos){const p=S.pos[s],pnl=p.u*((PX[s]??p.entry)-p.entry)*FX;op+=pnl;items.push({open:1,s,t0:p.time,size:p.cost,entry:p.entry*FX,stop:p.stop*FX,pnl,pct:pnl/p.cost*100,why:"live"})}
+  const wins=S.jr.filter(j=>j.pnl>0).length,N=PAIRS.length;
+  let feed;
+  if(!running)feed=html`<${Dot} c="r" t="DISCONNECTED"/>`;
+  else if(!scanned)feed=html`<${Dot} c="a" t="CONNECTING (Binance REST)..."/>`;
+  else if(okN===N)feed=html`<${Dot} c="g" t=${"LIVE (Binance REST · "+N+"/"+N+" pairs)"}/>`;
+  else if(okN>0)feed=html`<${Dot} c="a" t=${"PARTIAL ("+okN+"/"+N+" pairs responding)"}/>`;
+  else feed=html`<${Dot} c="r" t="NO DATA (Binance unreachable or blocked)"/>`;
+  const all=items.concat(S.jr.slice().reverse().map(j=>({...j,open:0}))).filter(x=>flt==="all"||(flt==="open"?x.open:!x.open));
+  const pages=Math.max(1,Math.ceil(all.length/PER)),pg=Math.min(page,pages-1);
+  const secs=running&&scanned?Math.max(0,Math.ceil((nextAt-Date.now())/1e3))+"s":"--";
+  return html`<div>
+  <div className="nav">
+    <div className="brand">BINANCE 4H SWING TERMINAL<small>PAPER TRADING · ${N} PAIRS · 1 USD = ₹${FX}</small></div>
+    <div className="st"><i>DATA FEED</i>${feed}</div>
+    <div className="st"><i>TRADING ENGINE</i>${running?html`<${Dot} c="g" t="ACTIVE (Scanning every 60s)"/>`:html`<${Dot} c="m" t="IDLE"/>`}</div>
+    <div className="sp"></div>
+    <div className="st"><i>NEXT SCAN</i><span className="m">${secs}</span></div>
+    <button className=${"go"+(running?" on":"")} onClick=${()=>setRun(!running)}>${running?"STOP BOT":"START BOT"}</button>
+  </div>
+  ${running&&scanned&&okN===0&&html`<div className="warn">No Binance data received. No prices are simulated, so the bot will not trade. If this page is hosted somewhere that blocks outside requests (such as a sandboxed preview), open the HTML file locally or host it on your own site.</div>`}
+  <div className="kp">
+    <div className="k"><i>TOTAL EQUITY</i><b>${inr(eq)}</b><s className=${cls(eq-START)}>${inr(eq-START)} vs ₹10,000</s></div>
+    <div className="k"><i>OPEN P&L</i><b className=${cls(op)}>${inr(op)}</b><s>${Object.keys(S.pos).length} open</s></div>
+    <div className="k"><i>WIN RATE</i><b>${S.jr.length?(wins/S.jr.length*100).toFixed(0)+"%":"--"}</b><s>${S.jr.length} closed trades</s></div>
+    <div className="k"><i>CASH AVAILABLE</i><b>${inr(S.cash)}</b><s>risk/trade ${inr(eq*RISK)}</s></div>
+  </div>
+  <div className="ph"><span>SCANNER MATRIX · 4H CANDLES</span><span>${lastScan?"LAST SCAN "+ts(lastScan):""}</span></div>
+  <div className="w"><table><thead><tr><th>PAIR</th><th>PRICE (₹)</th><th>4H TREND</th><th>4H RSI</th><th>VOL SURGE</th><th>BOT DECISION</th><th className="l">STATUS NOTE</th></tr></thead><tbody>
+    ${PAIRS.map(s=>{const f=FEED[s];return f?html`<tr key=${s}><td>${name(s)}</td><td>${f.px?inr(f.px):"--"}</td><td className="m">${f.trend||"--"}</td><td>${f.rsi?f.rsi.toFixed(1):"--"}</td><td>${f.surge!=null?f.surge.toFixed(2)+"x":"--"}</td><td><span className=${"b "+f.dec}>${f.dec}</span></td><td className="l m">${f.note}</td></tr>`
+      :html`<tr key=${s}><td>${name(s)}</td><td colSpan="6" className="l m">${running?"scanning...":"engine idle"}</td></tr>`})}
+  </tbody></table></div>
+  <div className="ph"><span>EXECUTION JOURNAL</span><span>
+    ${["all","open","closed"].map(f=>html`<button key=${f} className=${"sm"+(flt===f?" act":"")} onClick=${()=>{setFlt(f);setPage(0)}}>${f.toUpperCase()}</button>`)}
+    ${" "}<button className="sm" onClick=${()=>{if(confirm("Reset paper account to ₹10,000?")){S={cash:START,pos:{},jr:[],seen:{}};save();setPage(0);force()}}}>RESET ACCOUNT</button></span></div>
+  <div className="w"><table><thead><tr><th>STATUS</th><th className="l">PAIR</th><th>ENTRY TIME</th><th>EXIT TIME</th><th>SIZE (₹)</th><th>ENTRY (₹)</th><th>STOP (₹)</th><th>P&L (₹)</th><th>P&L %</th><th className="l">REASON</th></tr></thead><tbody>
+    ${all.length?all.slice(pg*PER,pg*PER+PER).map((x,i)=>html`<tr key=${i}><td><span className=${"b "+(x.open?"OPEN":"CLOSED")}>${x.open?"OPEN":"CLOSED"}</span></td><td className="l">${name(x.s)}</td><td>${ts(x.t0)}</td><td>${x.t1?ts(x.t1):"--"}</td><td>${inr(x.size)}</td><td>${inr(x.entry)}</td><td>${inr(x.stop)}</td><td className=${cls(x.pnl)}>${inr(x.pnl)}</td><td className=${cls(x.pnl)}>${x.pct.toFixed(2)}%</td><td className="l m">${x.why}</td></tr>`)
+      :html`<tr><td colSpan="10" className="l m">No trades yet. Entries need a closed 4H candle with close above the 200 EMA, RSI above 60 and volume above 1.5x average.</td></tr>`}
+  </tbody></table></div>
+  <div className="pg"><button className="sm" onClick=${()=>setPage(Math.max(0,pg-1))}>${"< PREV"}</button><span>PAGE ${pg+1} / ${pages}</span><button className="sm" onClick=${()=>setPage(Math.min(pages-1,pg+1))}>${"NEXT >"}</button></div>
+  </div>`}
+ReactDOM.createRoot(document.getElementById("root")).render(html`<${App}/>`);
+</script>
+</body>
+</html>
